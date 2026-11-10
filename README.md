@@ -15,6 +15,30 @@
 
 > 详细设计见 [docs/01-设计说明.md](docs/01-设计说明.md)，安全边界见 [docs/03-安全说明.md](docs/03-安全说明.md)。
 
+## 界面预览
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/01-login.png" alt="登录页"></td>
+    <td width="50%"><img src="docs/images/04-files.png" alt="文件管理"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>登录页：SM2 交换会话密钥，密码不出明文</sub></td>
+    <td align="center"><sub>文件管理：浏览、上传（断点续传）、在线编辑、双击目录进入</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/02-terminal.png" alt="单窗格终端"></td>
+    <td width="50%"><img src="docs/images/03-split.png" alt="标签内左右分屏"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>真实 PTY：<code>cd</code> / <code>vim</code> / <code>top</code> / Tab 补全 / 256 色</sub></td>
+    <td align="center"><sub>标签内分屏：左右、上下，最多四宫格，右侧窗格可独立操作</sub></td>
+  </tr>
+</table>
+
+> 截图取自内网麒麟（UOS）环境，端口上用的是自签证书，所以浏览器地址栏标了「不安全」——
+> 证书指纹校验与 `tls.enabled` 的取舍见 [docs/03-安全说明.md](docs/03-安全说明.md)。
+
 ---
 
 ## 一、快速开始
