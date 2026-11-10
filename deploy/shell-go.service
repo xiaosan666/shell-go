@@ -1,0 +1,21 @@
+[Unit]
+Description=Shell Go web terminal
+Documentation=file://%h/shell-go/README.md
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/shell-go
+ExecStart=%h/shell-go/shell-go -config %h/shell-go/config.yaml
+Restart=on-failure
+RestartSec=3
+# 终端会话需要较多文件描述符
+LimitNOFILE=8192
+# 会话进程不继承额外权限
+NoNewPrivileges=true
+KillMode=control-group
+StandardOutput=append:%h/shell-go/data/stdout.log
+StandardError=append:%h/shell-go/data/stdout.log
+
+[Install]
+WantedBy=default.target

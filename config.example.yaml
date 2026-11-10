@@ -1,0 +1,102 @@
+# Shell Go 配置文件
+# 所有字段均可省略，省略时使用内置默认值。
+
+# 监听地址。建议配合 ip_whitelist 使用；也可改为 127.0.0.1:8443 由反代转发。
+listen: "0.0.0.0:8443"
+
+# HTTPS。内网自签场景把 enabled 设为 true、auto 设为 true 即可，
+# 证书仅存在于进程内存，浏览器首次访问需手动信任。
+tls:
+  enabled: false
+  auto: true
+  cert: ""
+  key: ""
+
+# 登录账号，可配置多个。密码支持两种写法：
+#   password: 明文（启动时用 bcrypt 哈希后仅存于内存）
+#   password_hash: 预先生成的 bcrypt 串（推荐，避免配置文件出现明文）
+#     生成方式：./shell-go -gen-hash '你的密码'
+#
+# role 决定账号能力，留空按 operator：
+#   admin    全权：终端 + 文件增删改 + 查看/删除所有人的录制
+#   operator 日常运维：终端 + 文件增删改 + 只能看自己的录制（默认）
+#   viewer   只读审计：不能开终端，只能读文件、查看所有人的录制
+#
+# perms 可逐项覆盖角色默认值，不写就是沿用角色默认：
+#   shell / files_read / files_write / files_delete / records_all / records_delete
+#   max_terms（该账号的并发终端数上限，0 表示沿用 security.max_terms）
+users:
+  - username: admin
+    password: "请改成强密码"
+    role: admin
+  # 审计岗：只读，看得到全部会话录制但不能删、不能开终端
+  # - username: auditor
+  #   password_hash: "$2a$10$..."
+  #   role: viewer
+  # 运维岗：想让他也能查看所有人的录制，就单独开 records_all
+  # - username: ops
+  #   password_hash: "$2a$10$..."
+  #   role: operator
+  #   perms:
+  #     records_all: true
+  #     max_terms: 4
+
+security:
+  # 来源 IP 白名单，支持单个 IP 与 CIDR；为空表示不限制（强烈建议填写）
+  ip_whitelist: []
+  # ip_whitelist:
+  #   - 10.0.0.0/8
+  #   - 192.168.10.25
+
+  idle_timeout: 30m      # 无操作超时
+  session_ttl: 12h       # 会话绝对有效期
+  max_sessions: 5        # 同时在线会话数上限
+  max_terms: 8           # 每个账号可打开的终端数（单个账号可用 perms.max_terms 覆盖）
+  login_max_fail: 5      # 连续登录失败次数
+  login_lock: 10m        # 触发后锁定时长
+  allow_root: false      # 是否允许 root 身份运行（默认禁止）
+
+terminal:
+  shell: "/bin/bash"
+  args: ["-l"]
+  cwd: ""                # 为空表示使用启动用户的家目录
+  env:
+    TERM: "xterm-256color"
+    # LANG 不写死：不配置时继承服务进程的 LANG（保留部署机的中文 locale），
+    # 进程环境也没有才兜底 C.UTF-8。确需固定可在此显式指定。
+  scrollback: 524288     # 回滚缓冲字节数
+  # ws：WebSocket 实时通道（推荐）；poll：纯 POST 轮询（WAF 禁止 WS 时使用）
+  transport: "ws"
+  poll_interval_ms: 120
+  idle_close: 30m        # 无连接且无输出的终端自动回收时间
+  snapshot_max: 131072   # 重连时回放的最大字节数
+  title: "Shell Go"
+
+# 文件管理：网页端的文件浏览 / 上传 / 下载。
+# 注意：下面的 root 指「文件管理的根目录」，不是 Linux 的 root 用户（那是 security.allow_root）。
+# 所有请求路径都限制在这个目录内，指向目录外的符号链接会被拒绝。
+# 实际读写权限来自运行本程序的系统用户，与登录账号的角色（users[].role）叠加生效。
+files:
+  enabled: true
+  root: "~"              # 允许访问的根目录，支持 ~ 与相对路径；默认是运行用户的 home
+  max_upload_mb: 200     # 单文件上传上限
+  max_edit_kb: 1024      # 网页内在线编辑的文本大小上限（超出请下载后编辑）
+  allow_write: true      # 允许上传、新建目录/文件、重命名、在线编辑
+  allow_delete: true     # 允许删除（删除不可恢复，按需关闭）
+
+# 会话录制：把终端输出按时间轴写入磁盘，支持网页回放。
+# 只记录输出；用户按键会由 shell 回显，因此回放与原会话一致。
+record:
+  enabled: true
+  dir: "data/records"
+  max_mb: 50             # 单个会话录制上限，超出后停止录制（不影响终端使用）
+  keep_days: 7           # 保留天数，0 表示不按时间清理
+  max_files: 200         # 最多保留文件数，0 表示不限制
+
+audit:
+  enabled: true
+  log_file: "data/audit.log"
+
+log:
+  file: "data/server.log"
+  level: "info"
