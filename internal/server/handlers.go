@@ -42,8 +42,9 @@ func (s *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginReq struct {
-	U string `json:"u"`
-	P string `json:"p"`
+	U  string `json:"u"`
+	P  string `json:"p"`
+	CT string `json:"ct"` // 滑动验证通过后拿到的票据
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +60,15 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginReq
 	if !c.bind(&req) {
 		return
+	}
+	// 先验验证码再看密码：没有票据说明没做滑动验证，直接挡掉，
+	// 免得密码爆破把「失败次数锁定」跑满。
+	if s.captchaOn() {
+		if err := s.puzzle.Consume(req.CT); err != nil {
+			s.audit.Log(audit.Event{Event: "login_captcha", User: req.U, IP: ip, Detail: err.Error()})
+			c.fail(codeBusiness, "请先完成滑动验证")
+			return
+		}
 	}
 	sess, err := s.auth.Login(req.U, req.P, ip)
 	if err != nil {

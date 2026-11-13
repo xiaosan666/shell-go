@@ -67,14 +67,14 @@ export async function handshake() {
   return j;
 }
 
-export async function login(user, pass) {
+export async function login(user, pass, captchaTicket) {
   await handshake();
   const k = sm2WrapKey(session.pub, session.key);
   const data = sealJSON(session.key, {
     ts: nowTS(),
     nonce: randomHex(16),
     token: '',
-    p: { u: user, p: pass },
+    p: { u: user, p: pass, ct: captchaTicket || '' },
   });
   const res = await postJSON('/api/login', { sid: session.sid, k, data });
   const j = await res.json();
@@ -91,6 +91,29 @@ export async function login(user, pass) {
   session.exp = d.expire;
   saveSession();
   return d;
+}
+
+// ---------- 滑动验证码 ----------
+// 与握手一样是登录前的明文接口：返回的只有图片，答案在服务端。
+
+export async function fetchCaptcha() {
+  const res = await postJSON('/api/captcha', {});
+  let j = {};
+  try {
+    j = await res.json();
+  } catch { /* ignore */ }
+  if (!res.ok) throw new ApiError(-1, j.error || '验证码加载失败');
+  return j;
+}
+
+export async function verifyCaptcha(cid, x) {
+  const res = await postJSON('/api/captcha/verify', { cid, x });
+  let j = {};
+  try {
+    j = await res.json();
+  } catch { /* ignore */ }
+  if (!res.ok) throw new ApiError(-1, j.error || '验证失败，请重试');
+  return j;
 }
 
 export function saveSession() {

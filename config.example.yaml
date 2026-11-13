@@ -54,6 +54,7 @@ security:
   max_terms: 8           # 每个账号可打开的终端数（单个账号可用 perms.max_terms 覆盖）
   login_max_fail: 5      # 连续登录失败次数
   login_lock: 10m        # 触发后锁定时长
+  login_captcha: true    # 登录前滑动拼图验证（默认开启，仅联调时可关闭）
   allow_root: false      # 是否允许 root 身份运行（默认禁止）
 
 terminal:

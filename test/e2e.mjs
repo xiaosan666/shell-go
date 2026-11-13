@@ -1,5 +1,6 @@
 // 端到端协议测试：不经浏览器，直接按协议与服务端交互。
 // 用法：BASE=http://127.0.0.1:8443 USER=admin PASS=xxx SMCRYPTO_DIR=... node test/e2e.mjs
+// 注意：登录前有滑动拼图验证，脚本拖不了滑块，被测服务端需配置 security.login_captcha: false。
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -60,6 +61,13 @@ async function loginAs(user, pass) {
   const data = S.sealJSON(key, { ts: nowTS(), nonce: S.randomHex(16), token: '', p: { u: user, p: pass } });
   const j = await post('/api/login', { sid, k, data });
   const payload = S.openJSON(key, j.data);
+  // 登录前有滑动拼图验证，脚本没法拖动滑块：测这个服务端时把
+  // security.login_captcha 设成 false（或用 -c 临时配置），别在这条链路上做特例。
+  if (payload.code !== 0 && String(payload.msg || '').includes('滑动验证')) {
+    throw new Error(
+      '服务端要求滑动验证码，自动化测试无法完成。请以 security.login_captcha: false 启动被测服务端',
+    );
+  }
   assert(payload.code === 0, '登录应成功，实际：' + payload.msg);
   token = payload.data.token;
   return payload.data;

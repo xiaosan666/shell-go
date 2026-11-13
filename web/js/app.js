@@ -2,6 +2,7 @@ import { session, login, restoreSession, clearSession, api, ApiError, sealFrame,
 import { TermView, THEMES } from './terminal.js';
 import { initFileBrowser, openFileBrowser, setTermLocator } from './files.js';
 import { initReplay } from './replay.js';
+import { createCaptcha } from './captcha.js';
 import { b64ToBytes, bytesToB64 } from './secure.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,6 +28,8 @@ const state = {
 
 // ---------- 登录 ----------
 
+let captcha = null;
+
 function bindLogin() {
   const form = $('login-form');
   form.addEventListener('submit', async (e) => {
@@ -36,11 +39,17 @@ function bindLogin() {
     const user = $('login-user').value.trim();
     const pass = $('login-pass').value;
     if (!user || !pass) return;
+    // 服务端要求先过滑动验证；没做就别白跑一次密码校验
+    if (captcha && !captcha.disabled() && !captcha.ticket()) {
+      err.hidden = true;
+      captcha.nudge();
+      return;
+    }
     err.hidden = true;
     btn.disabled = true;
     btn.textContent = '正在建立加密通道…';
     try {
-      const d = await login(user, pass);
+      const d = await login(user, pass, captcha ? captcha.ticket() : '');
       document.title = `${d.title || 'Shell Go'} · ${user}`;
       showApp();
       await openInitialTabs();
@@ -49,6 +58,8 @@ function bindLogin() {
       err.hidden = false;
       $('login-pass').value = '';
       $('login-pass').focus();
+      // 票据一次性，失败后必须重新取图重新验证
+      if (captcha) captcha.reset();
     } finally {
       btn.disabled = false;
       btn.textContent = '登录';
@@ -65,6 +76,7 @@ function showLogin(message) {
   $('login-view').hidden = false;
   $('login-pass').value = '';
   $('login-user').focus();
+  if (captcha) captcha.reset();
   if (message) {
     $('login-err').textContent = message;
     $('login-err').hidden = false;
@@ -1069,6 +1081,7 @@ function doLogout() {
 
 async function boot() {
   setTheme(state.theme);
+  captcha = createCaptcha();
   bindLogin();
   bindKeys();
   bindContextMenu();

@@ -148,6 +148,9 @@ type Security struct {
 	LoginMaxFail int      `yaml:"login_max_fail"`
 	LoginLock    Duration `yaml:"login_lock"`
 	AllowRoot    bool     `yaml:"allow_root"`
+	// LoginCaptcha 登录前是否必须完成滑动拼图验证（默认开启）。
+	// 只有做接口联调/自动化测试时才建议关掉。
+	LoginCaptcha OptBool `yaml:"login_captcha"`
 	// 允许跨源请求（默认关闭）
 	AllowCORS bool `yaml:"allow_cors"`
 }

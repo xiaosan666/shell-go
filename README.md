@@ -2,7 +2,8 @@
 
 面向内网服务器的**网页版 Linux 终端**。单文件 Go 二进制，前端资源内嵌，不需要 Java / Node / Python，也不依赖 glibc（`CGO_ENABLED=0` 静态编译），在麒麟 V10 等国产系统的 x86_64 与 aarch64 上可直接运行。
 
-- 登录后才能使用，账号密码来自配置文件或启动参数
+- 登录后才能使用，账号密码来自配置文件或启动参数；**登录前需要拖动滑块完成拼图验证**——
+  图形由服务端现画，缺口位置不下发，一次一图，猜错即作废（`security.login_captcha`，默认开启）
 - **账号分级**：`admin` / `operator` / `viewer` 三种角色，可逐项微调；只读审计账号不能开终端，
   运维账号看不到别人的会话录制
 - 全链路国密：SM2 交换密钥 → SM4-CBC 加密报文 → SM3-HMAC 校验完整性，带时间戳与随机数防重放
@@ -23,7 +24,7 @@
     <td width="50%"><img src="docs/images/04-files.png" alt="文件管理"></td>
   </tr>
   <tr>
-    <td align="center"><sub>登录页：SM2 交换会话密钥，密码不出明文</sub></td>
+    <td align="center"><sub>登录页：先过滑动拼图，再用 SM2 交换会话密钥，密码不出明文</sub></td>
     <td align="center"><sub>文件管理：浏览、上传（断点续传）、在线编辑、双击目录进入</sub></td>
   </tr>
   <tr>
@@ -184,6 +185,7 @@ ss -lntp | grep 8443                                # 确认端口是否被别�
 | `security.max_terms` | `8` | 每个账号可开终端数（可被 `users[].perms.max_terms` 覆盖） |
 | `security.login_max_fail` | `5` | 连续失败次数，超过后按 IP 锁定 |
 | `security.login_lock` | `10m` | 锁定时长 |
+| `security.login_captcha` | `true` | 登录前滑动拼图验证；仅接口联调/自动化测试时建议关闭 |
 | `security.allow_root` | `false` | 是否允许以 root 运行（默认拒绝） |
 | `terminal.shell` | `/bin/bash` | 启动的 shell |
 | `terminal.args` | `["-l"]` | shell 参数 |

@@ -17,6 +17,7 @@ import (
 
 	"shellgo/internal/audit"
 	"shellgo/internal/auth"
+	"shellgo/internal/captcha"
 	"shellgo/internal/config"
 	"shellgo/internal/crypto"
 	"shellgo/internal/files"
@@ -54,6 +55,9 @@ type Server struct {
 	allowIPs  []net.IP
 
 	hsLimiter *rateLimiter
+	puzzle    *captcha.Manager
+	capLimit  *rateLimiter
+	capVerify *rateLimiter
 }
 
 type cryptoSession struct {
@@ -91,6 +95,9 @@ func New(cfg *config.Config, am *auth.Manager, tm *terminal.Manager, fm *files.M
 		sessions:  map[string]*cryptoSession{},
 		tickets:   map[string]*ticket{},
 		hsLimiter: newRateLimiter(60, time.Minute),
+		puzzle:    captcha.New(),
+		capLimit:  newRateLimiter(30, time.Minute),
+		capVerify: newRateLimiter(20, time.Minute),
 	}
 	for _, raw := range cfg.Security.IPWhitelist {
 		if ip := net.ParseIP(raw); ip != nil {
@@ -109,8 +116,10 @@ func New(cfg *config.Config, am *auth.Manager, tm *terminal.Manager, fm *files.M
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// 公开接口（握手）。
+	// 公开接口（握手与登录前的验证码）。
 	mux.HandleFunc("POST /api/handshake", s.handleHandshake)
+	mux.HandleFunc("POST /api/captcha", s.handleCaptcha)
+	mux.HandleFunc("POST /api/captcha/verify", s.handleCaptchaVerify)
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 
 	// 需要登录的接口。
@@ -505,6 +514,8 @@ func (s *Server) Sweep() {
 		}
 	}
 	s.mu.Unlock()
+
+	s.puzzle.Sweep()
 }
 
 // ---------- 静态资源 ----------

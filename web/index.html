@@ -37,6 +37,39 @@
         <span>密码</span>
         <input id="login-pass" type="password" required autocomplete="current-password" placeholder="请输入密码">
       </label>
+
+      <!-- 滑动拼图验证：图片与答案都由服务端生成，这里只负责拖动 -->
+      <div class="captcha" id="captcha">
+        <div class="cap-stage" id="cap-stage">
+          <img class="cap-bg" id="cap-bg" alt="验证码背景图">
+          <img class="cap-piece" id="cap-piece" alt="">
+          <button type="button" class="cap-reload" id="cap-reload" title="换一张" aria-label="换一张验证码">
+            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+              <path d="M13 8a5 5 0 11-1.7-3.8M13 2.2v3.1h-3.1" fill="none" stroke="currentColor"
+                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="cap-done" id="cap-done" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <path d="M3.5 8.5l3 3 6-6.5" fill="none" stroke="currentColor" stroke-width="1.9"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>验证通过</span>
+          </div>
+        </div>
+        <div class="cap-track" id="cap-track">
+          <div class="cap-fill" id="cap-fill"></div>
+          <span class="cap-hint" id="cap-hint">按住滑块，拖动完成拼图</span>
+          <div class="cap-handle" id="cap-handle" role="slider" tabindex="0"
+               aria-label="拖动滑块完成拼图验证" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+              <path d="M5.5 3.5L10 8l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
       <button id="login-btn" type="submit" class="primary">登 录</button>
       <p id="login-err" class="err" hidden></p>
     </form>

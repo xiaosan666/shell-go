@@ -1,7 +1,7 @@
 # API 协议
 
 所有接口均为 `POST`，请求与响应体为 JSON，`Content-Type: application/json`。
-除 `/api/handshake` 外，业务载荷均为国密信封加密。
+除 `/api/handshake`、`/api/captcha`、`/api/captcha/verify` 外，业务载荷均为国密信封加密。
 
 ## 1. 通用约定
 
@@ -66,6 +66,8 @@
 | 路径 | 说明 | 需要登录 |
 |---|---|---|
 | `POST /api/handshake` | 获取 sid、SM2 公钥、服务器时间 | 否 |
+| `POST /api/captcha` | 取一张滑动拼图验证码 | 否 |
+| `POST /api/captcha/verify` | 校验拖动位置，换取登录票据 | 否 |
 | `POST /api/login` | 登录，建立会话密钥 | 否 |
 | `POST /api/session` | 校验登录态 | 是 |
 | `POST /api/logout` | 退出登录 | 是 |
@@ -128,7 +130,7 @@
 信封内明文：
 
 ```json
-{ "ts": 1700000000, "nonce": "...", "token": "", "p": { "u": "admin", "p": "密码" } }
+{ "ts": 1700000000, "nonce": "...", "token": "", "p": { "u": "admin", "p": "密码", "ct": "滑动验证票据" } }
 ```
 
 响应（会话密钥加密）：
@@ -159,9 +161,57 @@
 }
 ```
 
+`ct` 是 `/api/captcha/verify` 签发的票据，服务端在验密码之前先核销它（一次性、2 分钟有效）；
+没有票据直接返回 `code=4 请先完成滑动验证`，不会进入密码校验，避免爆破打满失败锁定。
+`security.login_captcha: false` 时不校验。
+
 `caps` 是该账号的最终能力集合，前端据此隐藏无权限的入口。**它只是界面提示**：
 服务端对每个接口独立校验，改前端也提不了权。`/api/session` 返回同样的 `caps`，
 用于刷新页面后按最新角色渲染。
+
+### 3.2.1 POST /api/captcha
+
+请求：`{}`（明文）
+
+响应（明文）：
+
+```json
+{
+  "cid": "32位hex，本次验证码的标识",
+  "bg": "data:image/png;base64,...",
+  "piece": "data:image/png;base64,...",
+  "w": 304, "h": 136,
+  "pw": 42, "ph": 49,
+  "py": 47,
+  "tol": 6
+}
+```
+
+`bg` 是挖了缺口的背景图，`piece` 是从缺口处裁下来的拼图块，`py` 是拼图块在
+背景里的纵向偏移，`tol` 是允许的像素误差。**缺口横坐标不在响应里**，只有服务端知道。
+
+`security.login_captcha: false` 时响应 `{"disabled": true}`，前端据此隐藏滑块。
+
+### 3.2.2 POST /api/captcha/verify
+
+请求：
+
+```json
+{ "cid": "上一步拿到的 cid", "x": 236 }
+```
+
+`x` 是拖动结束后拼图块的横向位移（图片像素，1:1 对应 `w`）。
+
+成功：
+
+```json
+{ "ticket": "48位hex，一次性登录票据，2 分钟有效" }
+```
+
+失败（HTTP 400）：`{"error":"拼图位置不正确，请重试"}`，`cid` 同时作废。
+
+一次「取图 + 校验」只能消耗一次：位置不对、超时（2 分钟）或重复提交都会让该 `cid` 失效，
+需要重新 `POST /api/captcha`。同一 IP 取图 30 次/分钟、校验 20 次/分钟。
 
 ### 3.3 POST /api/term/create
 
