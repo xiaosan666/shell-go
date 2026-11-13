@@ -197,3 +197,43 @@ func TestExampleConfigLoads(t *testing.T) {
 		t.Fatalf("示例里的引导账号应是 admin，实际 %s", got.Role)
 	}
 }
+
+// TestValidateIPRules 固定白名单与反代地址的校验：写错要在启动时就失败，
+// 而不是等到线上发现「白名单没生效」。
+func TestValidateIPRules(t *testing.T) {
+	base := func() *Config {
+		c := Default()
+		c.Users = []User{{Username: "ops", Password: "x"}}
+		return c
+	}
+
+	cases := []struct {
+		name    string
+		field   string
+		value   []string
+		wantErr bool
+	}{
+		{name: "白名单合法", field: "whitelist", value: []string{"10.0.0.0/8", "192.168.1.5"}, wantErr: false},
+		{name: "白名单写错", field: "whitelist", value: []string{"10.0.0.0/33"}, wantErr: true},
+		{name: "反代地址合法", field: "proxy", value: []string{"127.0.0.1", "10.0.0.0/24"}, wantErr: false},
+		{name: "反代地址写错", field: "proxy", value: []string{"nginx"}, wantErr: true},
+		{name: "反代不能是全网段", field: "proxy", value: []string{"0.0.0.0/0"}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := base()
+			if tc.field == "whitelist" {
+				c.Security.IPWhitelist = tc.value
+			} else {
+				c.Security.TrustedProxies = tc.value
+			}
+			err := c.Validate()
+			if tc.wantErr && err == nil {
+				t.Fatalf("期望校验失败，实际通过")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("期望校验通过，实际 %v", err)
+			}
+		})
+	}
+}

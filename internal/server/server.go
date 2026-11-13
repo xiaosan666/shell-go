@@ -53,6 +53,9 @@ type Server struct {
 
 	whitelist []*net.IPNet
 	allowIPs  []net.IP
+	// 反向代理地址。只有直连对端在这里面时才采信 X-Forwarded-For。
+	proxyNets []*net.IPNet
+	proxyIPs  []net.IP
 
 	hsLimiter *rateLimiter
 	puzzle    *captcha.Manager
@@ -99,17 +102,17 @@ func New(cfg *config.Config, am *auth.Manager, tm *terminal.Manager, fm *files.M
 		capLimit:  newRateLimiter(30, time.Minute),
 		capVerify: newRateLimiter(20, time.Minute),
 	}
-	for _, raw := range cfg.Security.IPWhitelist {
-		if ip := net.ParseIP(raw); ip != nil {
-			s.allowIPs = append(s.allowIPs, ip)
-			continue
-		}
-		_, ipnet, err := net.ParseCIDR(raw)
-		if err != nil {
-			return nil, fmt.Errorf("非法白名单项 %q", raw)
-		}
-		s.whitelist = append(s.whitelist, ipnet)
+	allowIPs, allowNets, err := parseIPRules(cfg.Security.IPWhitelist)
+	if err != nil {
+		return nil, fmt.Errorf("ip_whitelist: %w", err)
 	}
+	s.allowIPs, s.whitelist = allowIPs, allowNets
+
+	proxyIPs, proxyNets, err := parseIPRules(cfg.Security.TrustedProxies)
+	if err != nil {
+		return nil, fmt.Errorf("trusted_proxies: %w", err)
+	}
+	s.proxyIPs, s.proxyNets = proxyIPs, proxyNets
 	return s, nil
 }
 
@@ -162,7 +165,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := s.clientIP(r)
 		if !s.ipAllowed(ip) {
 			s.log.Warn("拒绝非白名单访问", "ip", ip, "path", r.URL.Path)
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -180,33 +183,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 	})
 }
 
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
 func (s *Server) ipAllowed(ipStr string) bool {
 	if len(s.whitelist) == 0 && len(s.allowIPs) == 0 {
 		return true
 	}
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return false
-	}
-	for _, a := range s.allowIPs {
-		if a.Equal(ip) {
-			return true
-		}
-	}
-	for _, n := range s.whitelist {
-		if n.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return ipInSet(net.ParseIP(ipStr), s.allowIPs, s.whitelist)
 }
 
 // ---------- 信封读写 ----------
@@ -354,7 +335,7 @@ func (s *Server) openLogin(w http.ResponseWriter, r *http.Request) (*call, error
 	if !cs.acceptNonce(p.Nonce, tsWindow) {
 		return nil, &plainError{"重复请求被拒绝", http.StatusBadRequest}
 	}
-	return &call{s: s, w: w, r: r, cs: cs, p: &p, ip: clientIP(r)}, nil
+	return &call{s: s, w: w, r: r, cs: cs, p: &p, ip: s.clientIP(r)}, nil
 }
 
 func (s *Server) openCall(w http.ResponseWriter, r *http.Request) (*call, error) {
@@ -384,7 +365,7 @@ func (s *Server) openCall(w http.ResponseWriter, r *http.Request) (*call, error)
 	if !cs.acceptNonce(p.Nonce, tsWindow) {
 		return nil, &plainError{"重复请求被拒绝", http.StatusBadRequest}
 	}
-	c := &call{s: s, w: w, r: r, cs: cs, p: &p, ip: clientIP(r)}
+	c := &call{s: s, w: w, r: r, cs: cs, p: &p, ip: s.clientIP(r)}
 	// 令牌必须存在。openLogin 在验密码之前就把会话密钥写进了 cs，
 	// 所以「握手 + 故意输错密码」也能拿到一个可解密的通道；
 	// 如果这里允许空令牌，未登录就能调用文件、终端等接口。

@@ -78,7 +78,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer t.Detach(sub)
 
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	s.audit.Log(audit.Event{Event: "ws_open", User: tk.user, IP: ip, Term: t.ID})
 	defer s.audit.Log(audit.Event{Event: "ws_close", User: tk.user, IP: ip, Term: t.ID})
 

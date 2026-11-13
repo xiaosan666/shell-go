@@ -20,7 +20,7 @@ import (
 var Version = "dev"
 
 func (s *Server) handleHandshake(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	if !s.hsLimiter.allow(ip) {
 		writePlainError(w, &plainError{"握手请求过于频繁", http.StatusTooManyRequests})
 		return
@@ -48,7 +48,7 @@ type loginReq struct {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	c, err := s.openLogin(w, r)
 	if err != nil {
 		if errors.Is(err, errAbort) {

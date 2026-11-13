@@ -140,14 +140,18 @@ func (u User) CapsOf(globalMaxTerms int) Caps {
 }
 
 type Security struct {
-	IPWhitelist  []string `yaml:"ip_whitelist"`
-	IdleTimeout  Duration `yaml:"idle_timeout"`
-	SessionTTL   Duration `yaml:"session_ttl"`
-	MaxSessions  int      `yaml:"max_sessions"`
-	MaxTerms     int      `yaml:"max_terms"`
-	LoginMaxFail int      `yaml:"login_max_fail"`
-	LoginLock    Duration `yaml:"login_lock"`
-	AllowRoot    bool     `yaml:"allow_root"`
+	IPWhitelist []string `yaml:"ip_whitelist"`
+	// TrustedProxies 是反向代理自身的地址/网段。
+	// 只有直连对端落在这里面时，才采信 X-Forwarded-For / X-Real-IP 里的来源 IP；
+	// 为空表示一律不采信（直接取 TCP 对端地址）。
+	TrustedProxies []string `yaml:"trusted_proxies"`
+	IdleTimeout    Duration `yaml:"idle_timeout"`
+	SessionTTL     Duration `yaml:"session_ttl"`
+	MaxSessions    int      `yaml:"max_sessions"`
+	MaxTerms       int      `yaml:"max_terms"`
+	LoginMaxFail   int      `yaml:"login_max_fail"`
+	LoginLock      Duration `yaml:"login_lock"`
+	AllowRoot      bool     `yaml:"allow_root"`
 	// LoginCaptcha 登录前是否必须完成滑动拼图验证（默认开启）。
 	// 只有做接口联调/自动化测试时才建议关掉。
 	LoginCaptcha OptBool `yaml:"login_captcha"`
@@ -380,10 +384,26 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("用户 %s 的 perms.max_terms 不能为负数", u.Username)
 		}
 	}
-	for _, ip := range c.Security.IPWhitelist {
-		if _, _, err := net.ParseCIDR(ip); err != nil {
-			if net.ParseIP(ip) == nil {
-				return fmt.Errorf("ip_whitelist 中的 %q 既不是合法 IP 也不是 CIDR", ip)
+	for _, item := range []struct {
+		name string
+		list []string
+	}{
+		{"ip_whitelist", c.Security.IPWhitelist},
+		{"trusted_proxies", c.Security.TrustedProxies},
+	} {
+		for _, ip := range item.list {
+			if _, _, err := net.ParseCIDR(ip); err != nil {
+				if net.ParseIP(ip) == nil {
+					return fmt.Errorf("%s 中的 %q 既不是合法 IP 也不是 CIDR", item.name, ip)
+				}
+			}
+		}
+	}
+	// trusted_proxies 写宽了等于把来源 IP 交给客户端自报，挡掉最危险的写法。
+	for _, raw := range c.Security.TrustedProxies {
+		if _, n, err := net.ParseCIDR(raw); err == nil {
+			if ones, _ := n.Mask.Size(); ones == 0 {
+				return fmt.Errorf("trusted_proxies 不能是 %q：全网段意味着任何来源都能伪造 X-Forwarded-For", raw)
 			}
 		}
 	}

@@ -22,7 +22,7 @@ func (s *Server) handleCaptcha(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"disabled": true})
 		return
 	}
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	if !s.capLimit.allow(ip) {
 		writePlainError(w, &plainError{"验证码请求过于频繁，请稍后重试", http.StatusTooManyRequests})
 		return
@@ -48,7 +48,7 @@ func (s *Server) handleCaptchaVerify(w http.ResponseWriter, r *http.Request) {
 		writePlainError(w, &plainError{"验证码已关闭", http.StatusBadRequest})
 		return
 	}
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	if !s.capVerify.allow(ip) {
 		writePlainError(w, &plainError{"验证过于频繁，请稍后重试", http.StatusTooManyRequests})
 		return
