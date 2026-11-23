@@ -3,6 +3,7 @@ package files
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"shellgo/internal/config"
@@ -267,6 +268,56 @@ func TestRelFromAbs(t *testing.T) {
 		if ok != c.ok || got != c.want {
 			t.Fatalf("RelFromAbs(%q) = (%q, %v)，期望 (%q, %v)", c.abs, got, ok, c.want, c.ok)
 		}
+	}
+}
+
+// TestWithinSystemRoot 锁住 root 配 "/" 时的边界判断。
+// 旧实现用 root+"/" 拼前缀，root="/" 会拼成 "//"，除 "/" 之外全部被判成越界，
+// 表现为文件管理整页「路径超出允许的根目录」。
+func TestWithinSystemRoot(t *testing.T) {
+	cases := []struct {
+		root, p string
+		want    bool
+	}{
+		{"/", "/", true},
+		{"/", "/data", true},
+		{"/", "/data/app", true},
+		{"/data", "/data", true},
+		{"/data", "/data/app", true},
+		{"/data", "/database", false}, // 同前缀但不在其下
+		{"/data", "/", false},
+		{"/data", "/etc/passwd", false},
+	}
+	for _, c := range cases {
+		if got := within(c.root, c.p); got != c.want {
+			t.Fatalf("within(%q, %q) = %v，期望 %v", c.root, c.p, got, c.want)
+		}
+	}
+}
+
+// TestSystemRootFollowsTerminalDir 验证全盘模式（root="/"）下能正常列目录、
+// 并把终端目录映射成相对路径——这是「点文件图标打开当前终端目录」成立的前提。
+func TestSystemRootFollowsTerminalDir(t *testing.T) {
+	m, err := New(config.Files{Enabled: true, Root: "/", MaxUploadMB: 1, AllowWrite: true, AllowDelete: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Root() != "/" {
+		t.Fatalf("root = %q，期望 /", m.Root())
+	}
+	for _, abs := range []string{"/data", "/data/app/", "/root"} {
+		want := filepath.ToSlash(filepath.Clean(abs))
+		want = strings.TrimPrefix(want, "/")
+		if rel, ok := m.RelFromAbs(abs); !ok || rel != want {
+			t.Fatalf("RelFromAbs(%q) = (%q, %v)，期望 (%q, true)", abs, rel, ok, want)
+		}
+	}
+	// 列根目录与根下目录都不应被边界判断误拦（/etc 在各平台都存在）
+	if _, _, err := m.List(""); err != nil {
+		t.Fatalf("列根目录失败：%v", err)
+	}
+	if _, _, err := m.List("etc"); err != nil {
+		t.Fatalf("列 /etc 失败：%v", err)
 	}
 }
 

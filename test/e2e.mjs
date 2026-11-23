@@ -182,8 +182,15 @@ async function testFiles() {
   assert(Array.isArray(list.entries), '应返回目录列表');
   console.log('✓ 文件列表可用，根目录：', list.root);
 
+  // 默认 root 是 "/"（全盘），普通账号写不进根目录，用例统一在 root 内的工作目录里做。
+  // root 收紧成 ~ 或某个目录时，仍按原来的方式直接写在 root 下。
+  const systemRoot = String(list.root).replace(/\/+$/, '') === '';
+  const base = systemRoot ? `tmp/shellgo-e2e-${Date.now()}` : '';
+  if (base) await api('/api/file/mkdir', { path: base });
+  const at = (p) => (base ? `${base}/${p}` : p);
+
   const content = 'shell-go e2e ' + Date.now();
-  const name = `e2e-${Date.now()}.txt`;
+  const name = at(`e2e-${Date.now()}.txt`);
   const data = S.bytesToB64(S.utf8Bytes(content));
   const w = await api('/api/file/write', { path: name, offset: 0, total: content.length, data });
   assert(w.done && w.offset === content.length, '写入应完成');
@@ -226,18 +233,27 @@ async function testFiles() {
   console.log('✓ 在线编辑的并发冲突被拒绝');
 
   const rn = await api('/api/file/rename', { path: name, name: 'e2e-renamed.txt' });
-  assert(rn.path === 'e2e-renamed.txt', '重命名路径异常：' + rn.path);
-  await api('/api/file/remove', { path: 'e2e-renamed.txt' });
+  assert(rn.path === at('e2e-renamed.txt'), '重命名路径异常：' + rn.path);
+  await api('/api/file/remove', { path: at('e2e-renamed.txt') });
   console.log('✓ 重命名 / 删除正常');
-
-  let blocked = false;
-  try {
-    await api('/api/file/read', { path: '../../etc/passwd', offset: 0, size: 16 });
-  } catch {
-    blocked = true;
+  if (base) {
+    await api('/api/file/remove', { path: base, recursive: true });
+    console.log('✓ 工作目录已清理：' + base);
   }
-  assert(blocked, '越权路径应被拒绝');
-  console.log('✓ 目录越权被拒绝');
+
+  // root="/" 时任何路径都在允许范围内（cleanRel 会把 .. 归一化掉），这一条无从验证，跳过
+  if (systemRoot) {
+    console.log('○ 全盘模式（root="/"）下没有「越权」可测，跳过越权用例');
+  } else {
+    let blocked = false;
+    try {
+      await api('/api/file/read', { path: '../../etc/passwd', offset: 0, size: 16 });
+    } catch {
+      blocked = true;
+    }
+    assert(blocked, '越权路径应被拒绝');
+    console.log('✓ 目录越权被拒绝');
+  }
 }
 
 // 「打开文件管理定位到终端目录」依赖 /api/term/cwd：
@@ -247,19 +263,35 @@ async function testTermCwd() {
   const b64 = (t) => S.bytesToB64(S.utf8Bytes(t));
   const list = await api('/api/file/list', { path: '' });
   const root = String(list.root).replace(/\/+$/, '');
-  const dir = `e2e-cwd-${Date.now()}`;
-  await api('/api/file/mkdir', { path: dir });
+  // 全盘模式（root="/"）下不存在「root 外」，普通账号也写不进根目录，
+  // 工作目录统一放 /tmp —— 它照样落在 root 内，走的是「相对 root 的子路径」这条路。
+  const systemRoot = root === '';
+  const dirName = `e2e-cwd-${Date.now()}`;
+  const workDir = `${systemRoot ? '/tmp' : root}/${dirName}`;
+  const wantRel = systemRoot ? `tmp/${dirName}` : dirName;
+  await api('/api/file/mkdir', { path: workDir });
   const term = await api('/api/term/create', { cols: 100, rows: 30 });
   try {
-    await api('/api/term/input', { term: term.id, data: b64(`cd ${root}/${dir}\n`) });
+    await api('/api/term/input', { term: term.id, data: b64(`cd ${workDir}\n`) });
     let d = null;
     for (let i = 0; i < 50; i++) {
       await new Promise((r) => setTimeout(r, 100));
-      d = await api('/api/term/cwd', { term: term.id });
-      if (d.inside && d.rel === dir) break;
+      try {
+        d = await api('/api/term/cwd', { term: term.id });
+      } catch (e) {
+        // 没有 /proc 的平台（macOS）服务端会明确报错，前端此时退回上次位置，跳过本用例
+        console.log('○ 当前平台读不到终端工作目录，跳过定位用例：' + e.message);
+        return;
+      }
+      if (d.inside && d.rel === wantRel) break;
     }
     assert(d && d.inside === true, '终端目录应判定在 root 内，实际：' + JSON.stringify(d));
-    assert(d.rel === dir, '相对路径应为 ' + dir + '，实际：' + d.rel);
+    assert(d.rel === wantRel, '相对路径应为 ' + wantRel + '，实际：' + d.rel);
+
+    if (systemRoot) {
+      console.log('✓ 终端目录定位：全盘模式下 /tmp 子目录映射为 ' + wantRel);
+      return;
+    }
 
     // 走出 root：不能把 / 硬映射成 ""（那是 root 本身），必须 inside=false
     await api('/api/term/input', { term: term.id, data: b64('cd /\n') });
@@ -273,7 +305,7 @@ async function testTermCwd() {
     console.log('✓ 终端目录定位：root 内给相对路径，root 外只给绝对路径');
   } finally {
     await api('/api/term/close', { term: term.id });
-    await api('/api/file/remove', { path: dir, recursive: true });
+    await api('/api/file/remove', { path: workDir, recursive: true });
   }
 }
 

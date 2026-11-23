@@ -180,11 +180,20 @@ func (m *Manager) resolve(rel string, wantExisting bool) (string, string, error)
 	return real, clean, nil
 }
 
+// within 判断 p 是否落在 root 之内（含 root 本身）。
+//
+// 不能用 root+"/" 做前缀比较：root 配成 "/"（全盘）时会拼出 "//"，
+// 除 "/" 之外的任何路径都会被判成越界，文件管理整页报「路径超出根目录」。
+// 交给 filepath.Rel 归一化，顺带把 /data 与 /database 这类同前缀不同目录区分开。
 func within(root, p string) bool {
 	if p == root {
 		return true
 	}
-	return strings.HasPrefix(p, root+string(os.PathSeparator))
+	rel, err := filepath.Rel(root, p)
+	if err != nil || filepath.IsAbs(rel) {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 // List 返回目录内容。rel 为空表示 root。

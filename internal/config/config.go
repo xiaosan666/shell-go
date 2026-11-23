@@ -176,9 +176,10 @@ type Terminal struct {
 
 // Files 控制网页端文件管理的可见范围与权限。
 // 所有路径都被限制在 root 之下，符号链接逃逸会被拒绝。
+// root 默认 "/"（全盘），与终端能到达的范围保持一致；想收紧隔离时改成 ~ 或具体目录。
 type Files struct {
 	Enabled     bool   `yaml:"enabled"`
-	Root        string `yaml:"root"`          // 允许访问的根目录，支持 ~ 与相对路径
+	Root        string `yaml:"root"`          // 允许访问的根目录，支持 ~ 与相对路径；默认 "/"
 	MaxUploadMB int    `yaml:"max_upload_mb"` // 单文件上传上限
 	MaxEditKB   int    `yaml:"max_edit_kb"`   // 网页内在线编辑的文本大小上限
 	AllowWrite  bool   `yaml:"allow_write"`   // 允许上传/新建/重命名
@@ -242,7 +243,7 @@ func Default() *Config {
 		},
 		Files: Files{
 			Enabled:     true,
-			Root:        "~",
+			Root:        "/",
 			MaxUploadMB: 200,
 			MaxEditKB:   1024,
 			AllowWrite:  true,
@@ -332,7 +333,7 @@ func (c *Config) normalize() {
 	}
 	f := &c.Files
 	if f.Root == "" {
-		f.Root = "~"
+		f.Root = "/"
 	}
 	if f.MaxUploadMB <= 0 {
 		f.MaxUploadMB = 200

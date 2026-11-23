@@ -57,8 +57,8 @@ make build
 产物：
 
 ```
-dist/shell-go-1.5.0-linux-amd64.tar.gz
-dist/shell-go-1.5.0-linux-arm64.tar.gz
+dist/shell-go-1.6.0-linux-amd64.tar.gz
+dist/shell-go-1.6.0-linux-arm64.tar.gz
 ```
 
 编译只需 Go 1.22+，无需 Node。前端 xterm.js 与 sm-crypto 已作为静态资源入库（`web/js/vendor/`）。
@@ -82,8 +82,8 @@ cp config.example.yaml config.yaml
 ### 3. 部署到服务器（普通用户权限即可，**不要用 root**）
 
 ```bash
-tar xzf shell-go-1.5.0-linux-amd64.tar.gz
-cd shell-go-1.5.0-linux-amd64
+tar xzf shell-go-1.6.0-linux-amd64.tar.gz
+cd shell-go-1.6.0-linux-amd64
 
 # 默认：装到 ~/shell-go，配置生成在 ~/shell-go/config.yaml
 ./install.sh --port 8443
@@ -105,7 +105,7 @@ cd shell-go-1.5.0-linux-amd64
 
 **为什么装到 `~/shell-go` 而不是解压目录**：
 
-- 解压目录名带版本号（`shell-go-1.5.0-linux-amd64`），升级时路径会变，systemd 服务里写死的路径随即失效
+- 解压目录名带版本号（`shell-go-1.6.0-linux-amd64`），升级时路径会变，systemd 服务里写死的路径随即失效
 - 解压目录常在 `/tmp` 或下载目录，可能被清理；`/tmp` 还可能挂 `noexec`，二进制根本执行不了
 - 装到固定目录后，解压目录可以直接删掉，不留第二份副本
 
@@ -198,7 +198,7 @@ ss -lntp | grep 8443                                # 确认端口是否被别�
 | `terminal.idle_close` | `30m` | 无人连接且无输出的终端回收时间 |
 | `terminal.snapshot_max` | `131072` | 重连回放最大字节数 |
 | `files.enabled` | `true` | 是否启用网页文件管理 |
-| `files.root` | `~` | 文件管理可访问的根目录（逻辑边界，**与 Linux 的 root 用户无关**），支持 `~` 与相对路径 |
+| `files.root` | `/` | 文件管理可访问的根目录（逻辑边界，**与 Linux 的 root 用户无关**）；`/` 表示全盘，可跟随终端进入任意目录；支持 `~` 与相对路径 |
 | `files.max_upload_mb` | `200` | 单文件上传上限 |
 | `files.max_edit_kb` | `1024` | 网页内在线编辑的文本大小上限 |
 | `files.allow_write` | `true` | 允许上传 / 新建 / 重命名（与账号权限取交集） |
@@ -300,8 +300,9 @@ users:
 - 关掉窗格后布局会自动回退：4→3 仍是宫格，3→2 变回左右分屏
 - 非 HTTPS 环境下浏览器不允许脚本读取剪贴板，此时 `Ctrl+Shift+V` 会弹出输入框供手动粘贴
 - 文件管理支持双击目录进入；双击文件直接打开编辑器（只读账号则改为下载）
-- **打开文件管理会直接定位到当前窗格终端的目录**：切换窗格/标签后遵循焦点所在的那个；
-  该目录不在 `files.root` 之内时，弹窗会提示实际路径并退回上次浏览的位置
+- **打开文件管理会直接定位到当前窗格终端的目录**：切换窗格/标签后遵循焦点所在的那个，
+  `cd /data` 后点文件夹图标就列 `/data`；只有把 `files.root` 收紧成 `~` 或某个目录时，
+  终端 cd 到该目录外才会提示实际路径并退回上次浏览的位置
 - **上传、新建、改名、删除完成后列表自动刷新**，不用再手动点「刷新」
 - 顶部过滤框按名称筛选当前目录，不会递归搜索子目录
 - 上传按 256KB 分块走加密 POST，进度显示在弹窗底部；重复上传同名文件时，若已传部分与本地文件开头一致，
@@ -407,7 +408,9 @@ SMCRYPTO_DIR=/path/to/sm-crypto/dist E2E_PERMS=1 node test/e2e.mjs
 `perms.records_all: true`。只读审计账号（`viewer`）反过来——能看全部但不能开终端。
 
 **Q：文件管理里看不到某些目录 / 提示路径超出范围？**
-所有路径都被限制在 `files.root` 之下，`..` 与指向目录外的符号链接会被拒绝。需要访问其他位置时，把 `files.root` 改成它们的共同上级，或用符号链接（同样必须指向 root 内）。
+所有路径都被限制在 `files.root` 之下，`..` 与指向目录外的符号链接会被拒绝。默认 `files.root: "/"`（全盘），
+终端能去的目录文件管理都能去；如果你把它收紧成了 `~` 或 `/data`，超出这个范围的目录就会被拒绝，
+需要访问时把 `files.root` 改成它们的共同上级（例如 `/`），或改用符号链接（同样必须指向 root 内）。
 
 **Q：回放是空的 / 只有提示符？**
 录制只保存输出，若会话里没有执行命令，文件里就只有登录提示符。另外 `record.enabled: false` 或刚打开的录制尚未关闭时，列表里会显示「录制中」。

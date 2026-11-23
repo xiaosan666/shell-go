@@ -138,6 +138,15 @@ func main() {
 	if err != nil {
 		fatal(err.Error())
 	}
+	// 根目录决定文件管理能走多远，也决定「跟随终端目录」在哪些路径上生效，
+	// 卡在这里时第一现场就是这行日志（/ 表示全盘，/root 表示只到运行用户的主目录）。
+	if fm.Enabled() {
+		logger.Info("文件管理根目录", "root", fm.Root(), "writable", fm.Writable(), "deletable", fm.Deletable())
+		// 很多人是在这里才发现「文件管理怎么老停在 /root」：终端能 cd 出去，文件管理出不去。
+		if home, err := os.UserHomeDir(); err == nil && fm.Root() == home {
+			logger.Warn("文件管理被限制在用户主目录，终端 cd 到该目录之外时不会跟随；需要跟随请把 config.yaml 的 files.root 改成 /")
+		}
+	}
 
 	sub, err := fs.Sub(webAssets, "web")
 	if err != nil {
