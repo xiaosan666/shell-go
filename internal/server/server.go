@@ -79,7 +79,11 @@ type ticket struct {
 	user   string
 	sid    string
 	termID string
-	exp    time.Time
+	// token 是签发票据时的登录令牌。WS 建连后不再走 HTTP 校验，
+	// 靠它把「用户在终端里敲键盘」算成会话活跃，否则 idle_timeout 会把
+	// 一直开着终端的人判成空闲，文件管理等接口随即报「登录已过期」。
+	token string
+	exp   time.Time
 }
 
 func New(cfg *config.Config, am *auth.Manager, tm *terminal.Manager, fm *files.Manager, al *audit.Logger, log *slog.Logger, assets fs.FS) (*Server, error) {
@@ -457,7 +461,7 @@ func (cs *cryptoSession) acceptNonce(n string, window int64) bool {
 func (s *Server) issueTicket(c *call, termID string) (string, error) {
 	tk := crypto.RandomHex(24)
 	s.mu.Lock()
-	s.tickets[tk] = &ticket{user: c.user, sid: c.cs.id, termID: termID, exp: time.Now().Add(30 * time.Second)}
+	s.tickets[tk] = &ticket{user: c.user, sid: c.cs.id, termID: termID, token: c.p.Token, exp: time.Now().Add(30 * time.Second)}
 	s.mu.Unlock()
 	return tk, nil
 }

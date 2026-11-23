@@ -154,6 +154,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	})
 
+	// 终端里敲键盘也算「用户在场」：HTTP 侧的 idle_timeout 只统计接口调用，
+	// WS 通道建好之后不再校验令牌，只敲终端的人会被判成空闲掉线，
+	// 表现就是「终端还能正常输入，点文件管理却提示登录已过期」。
+	// 每次输入帧顺手续一次期（一次 map 查找，代价可以忽略）。
+	tokenGone := false
+
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -172,6 +178,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		case "i":
 			if data, err := base64.StdEncoding.DecodeString(f.D); err == nil {
 				_ = t.Write(data)
+			}
+			// 令牌确已失效（被挤下线 / 空闲或绝对超时 / 服务重启）就别再反复查：
+			// 终端本身保持可用，什么时候重新登录交给用户决定。
+			if !tokenGone {
+				if _, err := s.auth.Validate(tk.token); err != nil {
+					tokenGone = true
+				}
 			}
 		case "r":
 			t.Resize(f.X, f.Y)

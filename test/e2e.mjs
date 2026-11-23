@@ -147,6 +147,48 @@ async function testWS() {
   console.log('✓ 终端关闭成功');
 }
 
+// 「在终端里敲键盘」应算会话活跃：服务端把 idle_timeout 调短（E2E_IDLE_MS）时，
+// WS 里持续输入必须让 HTTP 侧会话续期，否则点文件管理会报「登录已过期」。
+// 这个用例需要服务端 idle_timeout 与 E2E_IDLE_MS 同量级，所以默认不跑。
+async function testIdleTouch() {
+  const idle = Number(process.env.E2E_IDLE_MS || 0);
+  if (!idle) return;
+  const term = await api('/api/term/create', { cols: 80, rows: 24 });
+  const { ticket } = await api('/api/term/ticket', { term: term.id });
+  const ws = new WebSocket(BASE.replace('http', 'ws') + '/ws?ticket=' + encodeURIComponent(ticket));
+  ws.binaryType = 'arraybuffer';
+  const decoder = new TextDecoder();
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('等待快照超时')), 8000);
+    ws.onmessage = (ev) => {
+      const frame = JSON.parse(decoder.decode(S.open(key, new Uint8Array(ev.data))));
+      if (frame.t === 's') {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    ws.onerror = () => reject(new Error('WebSocket 错误'));
+  });
+  const send = (obj) => ws.send(S.seal(key, S.utf8Bytes(JSON.stringify(obj))));
+  const b64 = (t) => S.bytesToB64(S.utf8Bytes(t));
+
+  // 超过一个空闲窗口，中间保持敲回车
+  const until = Date.now() + idle * 2.5;
+  while (Date.now() < until) {
+    send({ t: 'i', d: b64('\n') });
+    await new Promise((r) => setTimeout(r, idle / 3));
+  }
+  send({ t: 'i', d: b64('\n') });
+  await new Promise((r) => setTimeout(r, 200));
+
+  const list = await api('/api/file/list', { path: '' });
+  assert(list.root, '持续输入后文件接口不应过期');
+
+  ws.close();
+  await api('/api/term/close', { term: term.id });
+  console.log(`✓ 终端持续输入 ${Math.round((idle * 2.5) / 1000)}s（空闲窗口 ${idle}ms）后文件接口仍可用`);
+}
+
 async function testPoll() {
   const term = await api('/api/term/create', { cols: 90, rows: 24 });
   let cursor = term.cursor || 0;
@@ -267,12 +309,14 @@ async function testTermCwd() {
   // 工作目录统一放 /tmp —— 它照样落在 root 内，走的是「相对 root 的子路径」这条路。
   const systemRoot = root === '';
   const dirName = `e2e-cwd-${Date.now()}`;
-  const workDir = `${systemRoot ? '/tmp' : root}/${dirName}`;
-  const wantRel = systemRoot ? `tmp/${dirName}` : dirName;
-  await api('/api/file/mkdir', { path: workDir });
+  // 接口收的是「相对 root」的路径，cd 用的是绝对路径——两者不能混用
+  const relDir = systemRoot ? `tmp/${dirName}` : dirName;
+  const absDir = `${systemRoot ? '/tmp' : root}/${dirName}`;
+  const wantRel = relDir;
+  await api('/api/file/mkdir', { path: relDir });
   const term = await api('/api/term/create', { cols: 100, rows: 30 });
   try {
-    await api('/api/term/input', { term: term.id, data: b64(`cd ${workDir}\n`) });
+    await api('/api/term/input', { term: term.id, data: b64(`cd ${absDir}\n`) });
     let d = null;
     for (let i = 0; i < 50; i++) {
       await new Promise((r) => setTimeout(r, 100));
@@ -305,7 +349,7 @@ async function testTermCwd() {
     console.log('✓ 终端目录定位：root 内给相对路径，root 外只给绝对路径');
   } finally {
     await api('/api/term/close', { term: term.id });
-    await api('/api/file/remove', { path: workDir, recursive: true });
+    await api('/api/file/remove', { path: relDir, recursive: true });
   }
 }
 
@@ -428,6 +472,7 @@ async function main() {
   console.log('✓ 系统信息：', info.host, info.os);
   await testReplay();
   if (TRANSPORT === 'ws') await testWS();
+  if (TRANSPORT === 'ws') await testIdleTouch();
   await testPoll();
   if (process.env.E2E_FILES === '1') await testFiles();
   if (process.env.E2E_FILES === '1') await testTermCwd();

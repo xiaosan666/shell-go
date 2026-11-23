@@ -121,11 +121,24 @@ export async function openFileBrowser() {
       } else if (d.abs) {
         toast(`${d.abs} 不在文件根目录内，已回到上次位置`);
       }
-    } catch {
+    } catch (ex) {
+      if (authExpired(ex)) return;
       /* 静默退回上次位置 */
     }
   }
   await load(target);
+}
+
+// 会话过期（服务端 code=2）不是「这个文件加载失败」这么简单：
+// 终端通道还连着，但所有接口都调不动了。交给 app.js 统一退回登录页，
+// 否则用户只会看到弹框里一句错误，既不知道要重新登录，也没地方去登。
+function authExpired(ex) {
+  if (!ex || ex.code !== 2) return false;
+  $('filemodal').hidden = true;
+  window.dispatchEvent(new CustomEvent('shellgo:auth-expired', {
+    detail: { message: '登录已过期，请重新登录' },
+  }));
+  return true;
 }
 
 // 变更类操作（上传/新建/改名/删除）的统一入口。
@@ -213,6 +226,7 @@ async function load(path) {
     status('就绪');
     $('files-count').textContent = `${entries.length} 项`;
   } catch (ex) {
+    if (authExpired(ex)) return;
     status('加载失败：' + (ex.message || '未知错误'));
   } finally {
     busy = false;

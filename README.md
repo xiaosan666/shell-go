@@ -180,7 +180,7 @@ ss -lntp | grep 8443                                # 确认端口是否被别�
 | `users[].perms.*` | 沿用角色 | 逐项覆盖：`shell`、`files_read`、`files_write`、`files_delete`、`records_all`、`records_delete`、`max_terms` |
 | `security.ip_whitelist` | `[]` | 来源 IP / CIDR 白名单，为空表示不限制 |
 | `security.trusted_proxies` | `[]` | 反向代理地址 / CIDR；只有直连对端在其中时才采信 `X-Forwarded-For`。前面挂 nginx 时必须填代理地址，否则白名单看到的是 `127.0.0.1` |
-| `security.idle_timeout` | `30m` | 无操作超时 |
+| `security.idle_timeout` | `30m` | 无操作超时（接口调用与终端里的键盘输入都算操作） |
 | `security.session_ttl` | `12h` | 会话绝对有效期 |
 | `security.max_sessions` | `5` | 同时在线会话数上限 |
 | `security.max_terms` | `8` | 每个账号可开终端数（可被 `users[].perms.max_terms` 覆盖） |

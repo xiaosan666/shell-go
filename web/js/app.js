@@ -1063,18 +1063,20 @@ function setTheme(name) {
 
 // ---------- 退出 ----------
 
-async function forceLogout() {
+// forceLogout 用于「会话已不可用」的被动退出：令牌过期、被挤下线、服务重启。
+// 与主动点退出共用 doLogout，但会把原因带到登录页上，免得用户一头雾水。
+async function forceLogout(message) {
   state.loggingOut = true;
   try {
     await api('/api/logout');
   } catch { /* ignore */ }
-  doLogout();
+  doLogout(message);
 }
 
-function doLogout() {
+function doLogout(message) {
   state.loggingOut = false;
   clearSession();
-  showLogin('已退出登录');
+  showLogin(typeof message === 'string' ? message : '已退出登录');
 }
 
 // ---------- 启动 ----------
@@ -1089,6 +1091,12 @@ async function boot() {
   // 文件管理打开时定位到「光标所在窗格」的终端目录：
   // activeSession 就是最近一次获得焦点的窗格，切换窗格/标签都会更新它。
   setTermLocator(() => (state.activeSession && state.activeSession.id) || '');
+  // 其它模块撞到 401（code=2）时发这个事件，统一退回登录页。
+  // 服务端终端不会因此被关掉，重新登录后 openInitialTabs 会把它们接回来。
+  window.addEventListener('shellgo:auth-expired', (e) => {
+    if (state.loggingOut) return;
+    forceLogout((e.detail && e.detail.message) || '登录已过期，请重新登录');
+  });
   initReplay();
   $('login-user').focus();
 
