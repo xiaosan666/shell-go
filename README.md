@@ -57,8 +57,8 @@ make build
 产物：
 
 ```
-dist/shell-go-1.6.0-linux-amd64.tar.gz
-dist/shell-go-1.6.0-linux-arm64.tar.gz
+dist/shell-go-1.6.1-linux-amd64.tar.gz
+dist/shell-go-1.6.1-linux-arm64.tar.gz
 ```
 
 编译只需 Go 1.22+，无需 Node。前端 xterm.js 与 sm-crypto 已作为静态资源入库（`web/js/vendor/`）。
@@ -82,8 +82,8 @@ cp config.example.yaml config.yaml
 ### 3. 部署到服务器（普通用户权限即可，**不要用 root**）
 
 ```bash
-tar xzf shell-go-1.6.0-linux-amd64.tar.gz
-cd shell-go-1.6.0-linux-amd64
+tar xzf shell-go-1.6.1-linux-amd64.tar.gz
+cd shell-go-1.6.1-linux-amd64
 
 # 默认：装到 ~/shell-go，配置生成在 ~/shell-go/config.yaml
 ./install.sh --port 8443
@@ -105,7 +105,7 @@ cd shell-go-1.6.0-linux-amd64
 
 **为什么装到 `~/shell-go` 而不是解压目录**：
 
-- 解压目录名带版本号（`shell-go-1.6.0-linux-amd64`），升级时路径会变，systemd 服务里写死的路径随即失效
+- 解压目录名带版本号（`shell-go-1.6.1-linux-amd64`），升级时路径会变，systemd 服务里写死的路径随即失效
 - 解压目录常在 `/tmp` 或下载目录，可能被清理；`/tmp` 还可能挂 `noexec`，二进制根本执行不了
 - 装到固定目录后，解压目录可以直接删掉，不留第二份副本
 
